@@ -24,29 +24,29 @@ export function base64ToUint8Array(str) {
 
 export function createLazyWasmModule(_instantiator) {
   const _exports = Object.create(null);
-  let _loaded;
+  let _loaded = false;
   let _promise;
 
   const init = (imports) => {
     if (_loaded) {
       return Promise.resolve(exportsProxy);
     }
-    if (_promise) {
-      return _promise;
+    if (!_promise) {
+      _promise = _instantiator(imports)
+        .then((r) => {
+          Object.assign(_exports, getExports(r));
+          _loaded = true;
+          _promise = undefined;
+          return exportsProxy;
+        })
+        .catch((error) => {
+          _promise = undefined;
+          console.error("[wasm] [error]", error);
+          throw error;
+        });
     }
-    return _promise = _instantiator(imports)
-      .then(r => {
-        Object.assign(_exports, getExports(r));
-        _loaded = true;
-        _promise = undefined;
-        return exportsProxy;
-      })
-      .catch(error => {
-        _promise = undefined;
-        console.error('[wasm] [error]', error);
-        throw error;
-      });
-  }
+    return _promise;
+  };
 
   const exportsProxy = new Proxy(_exports, {
     get(_, prop) {
@@ -61,13 +61,12 @@ export function createLazyWasmModule(_instantiator) {
     },
   });
 
-
   const lazyProxy = new Proxy(() => {}, {
     get(_, prop) {
       return exportsProxy[prop];
     },
     apply(_, __, args) {
-      return init(args[0])
+      return init(args[0]);
     },
   });
 
